@@ -24,10 +24,10 @@ export class Grid {
     this.height = options.height;
     this.cellCount = options.width * options.height;
     this.canvasDimensions = {
-      width: options.width,
-      height: options.height,
-      // width: (Grid.CELL_SIZE + 1) * this.width + 1,
-      // height: (Grid.CELL_SIZE + 1) * this.height + 1,
+      // width: options.width,
+      // height: options.height,
+      width: (Grid.CELL_SIZE + 1) * this.width + 1,
+      height: (Grid.CELL_SIZE + 1) * this.height + 1,
     };
     this.ctx = options.ctx || null;
   }
@@ -60,7 +60,7 @@ export class Grid {
     this.ctx.stroke();
   }
 
-  private drawCells(state: Uint32Array) {
+  private drawCells(state: Uint8Array) {
     if (!this.ctx) throw new Error("Cannot draw without a context");
     this.ctx.beginPath();
 
@@ -102,10 +102,12 @@ export class Grid {
 
     this.ctx.stroke();
   }
-
-  render(imageData: Uint8ClampedArray) {
+  render(state: Uint8Array) {
     // this.drawGrid();
-    // this.drawCells(state);
+    this.drawCells(state);
+  }
+
+  renderImageData(imageData: Uint8ClampedArray) {
     const data = new ImageData(imageData, this.width);
     this.ctx?.putImageData(data, 0, 0);
   }
