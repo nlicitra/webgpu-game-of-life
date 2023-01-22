@@ -1,4 +1,4 @@
-export type GridState = Uint8Array;
+export type GridState = Uint32Array;
 export interface Dimensions {
   width: number;
   height: number;

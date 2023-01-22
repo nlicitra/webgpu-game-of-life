@@ -12,7 +12,7 @@
         align-items: start;
         gap: 1rem;
       }
-      canvas {
+      #gol-canvas {
           border: 1px solid black;
       }
       #fps {
@@ -29,9 +29,19 @@
         <button id="start">START</button>
         <button id="stop">PAUSE</button>
         <button id="reset">RESET</button>
+        <select id="compute-type">
+          <option value="js" selected>JavaScript</option>
+          <option value="gpu">GPU</option>
+        </select>
         <div id="fps"></div>
       </div>
-      <canvas></canvas>
+      <div>
+        <input id="resize" type="range" value="0">RESIZE</input>
+      </div>
+      <div>
+        <canvas id="fps-chart"></canvas>
+      </div>
+      <canvas id="gol-canvas"></canvas>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

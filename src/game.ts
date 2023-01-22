@@ -1,31 +1,34 @@
 import { wait, randomize } from "./util";
 import { SlidingWindow } from "./metrics";
 import { Dimensions, Frame } from "./types";
+import type { GridState } from "./types";
+import { Grid } from "./grid";
 
-type GridState = Uint8Array;
-type StateGenerator = (prevState: Frame) => Promise<GridState>;
-type RenderFn = (frame: Frame) => void;
+type FrameGenerator = (prevFrame: Frame) => Promise<[GridState, Uint8ClampedArray]>;
+type RenderFn = (imageData: Uint8ClampedArray) => void;
 
 export class Game {
-  private _generateNewState: StateGenerator;
-  private _render: RenderFn;
+  private _generateNewFrame: FrameGenerator;
   private running = false;
   private cancelNextUpdate = false;
-  private metricsCallback?: (metrics: any) => void;
+  private metricsCallback?: (metrics: any, stuff: any) => void;
 
   dimensions: Dimensions;
   fpsMetrics: SlidingWindow;
 
   state: GridState;
+  grid: Grid;
 
   constructor(dimensions: Dimensions) {
-    this._generateNewState = async (state) => state.gridState;
-    this._render = () => {};
+    this._generateNewFrame = async (prevFrame) => [
+      prevFrame.gridState,
+      Grid.getImageDataArrayFromState(prevFrame.gridState),
+    ];
 
-    this.dimensions = dimensions;
-    this.fpsMetrics = new SlidingWindow(1000);
-    this.state = new Uint8Array(this.dimensions.width * this.dimensions.height);
-    this.render();
+    this.fpsMetrics = new SlidingWindow(100);
+    this.grid = new Grid(dimensions);
+    this.updateDimensions(dimensions);
+    this.render(Grid.getImageDataArrayFromState(this.state));
   }
 
   getCurrentFrame(): Frame {
@@ -35,22 +38,25 @@ export class Game {
     };
   }
 
+  updateDimensions(dimensions: Dimensions) {
+    this.dimensions = dimensions;
+    this.state = new Uint32Array(this.dimensions.width * this.dimensions.height);
+    this.grid.updateDimensions(dimensions);
+  }
+
   randomizeState() {
     if (this.running) {
       this.cancelNextUpdate = true;
     }
-    this.state = randomize(new Uint8Array(this.state.length));
+    this.state = randomize(new Uint32Array(this.state.length));
   }
 
-  onMetricsUpdate(callback: (fps: number) => void) {
+  onMetricsUpdate(callback: (fps: number, data: number[]) => void) {
     this.metricsCallback = callback;
   }
 
-  setStateGenerator(callback: StateGenerator) {
-    this._generateNewState = callback;
-  }
-  setRender(callback: RenderFn) {
-    this._render = callback;
+  setFrameGenerator(callback: FrameGenerator) {
+    this._generateNewFrame = callback;
   }
 
   async loop() {
@@ -58,7 +64,7 @@ export class Game {
     this.running = true;
     let timestamp = performance.now();
     while (this.running) {
-      const state = await this._generateNewState(this.getCurrentFrame());
+      const [state, imageData] = await this._generateNewFrame(this.getCurrentFrame());
       if (this.cancelNextUpdate) {
         this.cancelNextUpdate = false;
       } else {
@@ -68,17 +74,18 @@ export class Game {
       const now = performance.now();
       this.fpsMetrics.register(1000 / (now - timestamp));
       if (this.metricsCallback) {
-        this.metricsCallback(this.fpsMetrics.avg());
+        this.metricsCallback(this.fpsMetrics.avg(), this.fpsMetrics.buffer);
       }
       timestamp = now;
 
       if (!this.running) break;
-      this.render();
+      this.render(imageData);
     }
   }
 
-  render() {
-    requestAnimationFrame(this._render.bind(this, this.getCurrentFrame()));
+  render(imageData?: Uint8ClampedArray) {
+    const _imageData = imageData ?? Grid.getImageDataArrayFromState(this.state);
+    requestAnimationFrame(() => this.grid.renderImageData(_imageData));
   }
 
   stop() {

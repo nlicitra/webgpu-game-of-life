@@ -22,3 +22,11 @@ export function randomize<T extends TypedArray>(array: T) {
   }
   return array;
 }
+
+export function debounce(fn: (...args: any[]) => void, timeout: number) {
+  let timeoutId: number;
+  return () => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(fn, timeout);
+  };
+}

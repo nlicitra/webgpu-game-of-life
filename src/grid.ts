@@ -1,3 +1,5 @@
+import { Dimensions, GridState } from "./types";
+
 interface IGridOptions {
   width: number;
   height: number;
@@ -5,7 +7,7 @@ interface IGridOptions {
 }
 
 export class Grid {
-  static CELL_SIZE = 3;
+  static CELL_SIZE = 1;
   static GRID_COLOR = "#CCCCCC";
   static DEAD_COLOR = "#FFFFFF";
   static ALIVE_COLOR = "cornflowerblue";
@@ -18,22 +20,41 @@ export class Grid {
     height: number;
   };
   ctx: CanvasRenderingContext2D | null;
+  canvas: HTMLCanvasElement;
 
   constructor(options: IGridOptions) {
-    this.width = options.width;
-    this.height = options.height;
-    this.cellCount = options.width * options.height;
+    this.ctx = options.ctx || null;
+    this.updateDimensions(options);
+  }
+
+  updateDimensions({ width, height }: Dimensions) {
+    this.width = width;
+    this.height = height;
+    this.cellCount = width * height;
     this.canvasDimensions = {
       // width: options.width,
       // height: options.height,
-      width: (Grid.CELL_SIZE + 1) * this.width + 1,
-      height: (Grid.CELL_SIZE + 1) * this.height + 1,
+      width: Grid.CELL_SIZE * this.width,
+      height: Grid.CELL_SIZE * this.height,
     };
-    this.ctx = options.ctx || null;
+    this.resizeCanvas();
   }
 
-  setContext(ctx: CanvasRenderingContext2D) {
-    this.ctx = ctx;
+  attachToCanvas(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      new Error("Error getting canvas context.");
+      return;
+    }
+    this.ctx = context;
+    this.resizeCanvas();
+  }
+
+  resizeCanvas() {
+    if (!this.canvas) return;
+    this.canvas.width = this.canvasDimensions.width;
+    this.canvas.height = this.canvasDimensions.height;
   }
 
   private getIndex(row: number, column: number) {
@@ -60,7 +81,7 @@ export class Grid {
     this.ctx.stroke();
   }
 
-  private drawCells(state: Uint8Array) {
+  private drawCells(state: GridState) {
     if (!this.ctx) throw new Error("Cannot draw without a context");
     this.ctx.beginPath();
 
@@ -73,12 +94,7 @@ export class Grid {
           continue;
         }
 
-        this.ctx.fillRect(
-          col * (Grid.CELL_SIZE + 1) + 1,
-          row * (Grid.CELL_SIZE + 1) + 1,
-          Grid.CELL_SIZE,
-          Grid.CELL_SIZE
-        );
+        this.ctx.fillRect(col * Grid.CELL_SIZE + 0, row * Grid.CELL_SIZE + 0, Grid.CELL_SIZE, Grid.CELL_SIZE);
       }
     }
 
@@ -91,18 +107,13 @@ export class Grid {
           continue;
         }
 
-        this.ctx.fillRect(
-          col * (Grid.CELL_SIZE + 1) + 1,
-          row * (Grid.CELL_SIZE + 1) + 1,
-          Grid.CELL_SIZE,
-          Grid.CELL_SIZE
-        );
+        this.ctx.fillRect(col * Grid.CELL_SIZE, row * Grid.CELL_SIZE, Grid.CELL_SIZE, Grid.CELL_SIZE);
       }
     }
 
     this.ctx.stroke();
   }
-  render(state: Uint8Array) {
+  render(state: GridState) {
     // this.drawGrid();
     this.drawCells(state);
   }
@@ -113,10 +124,10 @@ export class Grid {
   }
 
   // Slow Non GPU way
-  getImageDataArrayFromState(state: Uint32Array) {
+  static getImageDataArrayFromState(state: Uint32Array) {
     const clamped = new Uint8ClampedArray(state.length * 4);
     for (let i = 0; i < state.length; i++) {
-      const color = state[i] === 1 ? [100, 200, 255, 255] : [50, 50, 50, 255];
+      const color = state[i] === 1 ? [125, 255, 125, 255] : [50, 50, 50, 255];
       clamped.set(color, i * 4);
     }
     return clamped;

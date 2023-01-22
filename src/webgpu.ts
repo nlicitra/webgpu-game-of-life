@@ -1,201 +1,278 @@
 /// <reference types="@webgpu/types" />
 import gameOfLifeShader from "./shaders/game-of-life.wgsl?raw";
 import imageDataShader from "./shaders/image-data.wgsl?raw";
+import { Dimensions, GridState } from "./types";
 
-export async function setup(width: number, height: number) {
-  if (!navigator.gpu) throw Error("WebGPU not supported.");
+interface GPUModule {
+  buffers: Record<string, GPUBuffer>;
+  bufferSize: number;
+  bindGroup: GPUBindGroup;
+  pipeline: GPUComputePipeline;
+}
 
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) throw Error("Couldn’t request WebGPU adapter.");
+export class WebGPUGameOfLife {
+  adapter: GPUAdapter;
+  device: GPUDevice;
+  gameDimensions: Dimensions;
+  gameOfLifeModule: GPUModule;
+  imageDataModule: GPUModule;
+  bindGroupLayout: GPUBindGroupLayout;
+  shaderModules: {
+    gameOfLife: GPUShaderModule;
+    imageData: GPUShaderModule;
+  };
+  buffers: {
+    dimensions?: GPUBuffer;
+  };
 
-  // console.log(adapter.limits);
-  const device = await adapter.requestDevice();
-  // console.log(device.limits);
-  if (!device) throw Error("Couldn’t request WebGPU logical device.");
+  constructor(dimensions: Dimensions) {
+    this.buffers = {
+      dimensions: undefined,
+    };
+    this.init().then(() => {
+      this.updateDimensions(dimensions);
+    });
+  }
 
-  const gameOfLifeModule = device.createShaderModule({
-    code: gameOfLifeShader,
-  });
-  const imageDataModule = device.createShaderModule({
-    code: imageDataShader,
-  });
+  async init() {
+    if (!navigator.gpu) throw new Error("WebGPU not supported.");
 
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "uniform",
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("Couldn’t request WebGPU adapter.");
+    this.adapter = adapter;
+
+    // console.log(adapter.limits);
+    const device = await adapter.requestDevice();
+    // console.log(device.limits);
+    if (!device) throw new Error("Couldn’t request WebGPU logical device.");
+    this.device = device;
+
+    this.shaderModules = {
+      gameOfLife: device.createShaderModule({ code: gameOfLifeShader }),
+      imageData: device.createShaderModule({ code: imageDataShader }),
+    };
+
+    this.bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "uniform",
+          },
         },
-      },
-      {
-        binding: 1,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "read-only-storage",
+        {
+          binding: 1,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "read-only-storage",
+          },
         },
-      },
-      {
-        binding: 2,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "storage",
+        {
+          binding: 2,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: {
+            type: "storage",
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
+  }
 
-  const BUFFER_SIZE = width * height * 4;
+  initGameOfLifeModule() {
+    if (this.gameOfLifeModule) {
+      Object.values(this.gameOfLifeModule.buffers).forEach((b) => b.destroy());
+    }
+    const { width, height } = this.gameDimensions;
+    const BUFFER_SIZE = width * height * 4;
+    const input = this.device.createBuffer({
+      size: BUFFER_SIZE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    const output = this.device.createBuffer({
+      size: BUFFER_SIZE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+    });
+    const staging = this.device.createBuffer({
+      size: BUFFER_SIZE,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
 
-  const dimensions = device.createBuffer({
-    size: 8,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    mappedAtCreation: true,
-  });
-  const mappedDimensions = new Uint32Array(dimensions.getMappedRange());
-  mappedDimensions.set([width, height]);
-  dimensions.unmap();
-
-  const input = device.createBuffer({
-    size: BUFFER_SIZE,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-  });
-
-  const gameOfLifeOutput = device.createBuffer({
-    size: BUFFER_SIZE,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-  });
-  const gameOfLifeStagingBuffer = device.createBuffer({
-    size: BUFFER_SIZE,
-    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-  });
-
-  const output = device.createBuffer({
-    size: BUFFER_SIZE,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-  });
-  const stagingBuffer = device.createBuffer({
-    size: BUFFER_SIZE,
-    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-  });
-
-  const bindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: dimensions,
+    const bindGroup = this.device.createBindGroup({
+      layout: this.bindGroupLayout,
+      entries: [
+        {
+          binding: 0,
+          resource: {
+            buffer: this.buffers.dimensions!,
+          },
         },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: input,
+        {
+          binding: 1,
+          resource: {
+            buffer: input,
+          },
         },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: gameOfLifeOutput,
+        {
+          binding: 2,
+          resource: {
+            buffer: output,
+          },
         },
-      },
-    ],
-  });
+      ],
+    });
 
-  const imageDataBindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: dimensions,
+    const pipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.bindGroupLayout],
+      }),
+      compute: {
+        module: this.shaderModules.gameOfLife,
+        entryPoint: "main",
+      },
+    });
+
+    this.gameOfLifeModule = {
+      pipeline,
+      bindGroup,
+      bufferSize: BUFFER_SIZE,
+      buffers: {
+        input,
+        output,
+        staging,
+      },
+    };
+  }
+
+  initImageDataModule() {
+    if (this.imageDataModule) {
+      Object.values(this.imageDataModule.buffers).forEach((b) => b.destroy());
+    }
+    const { width, height } = this.gameDimensions;
+    const BUFFER_SIZE = width * height * 4;
+    const output = this.device.createBuffer({
+      size: BUFFER_SIZE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    const staging = this.device.createBuffer({
+      size: BUFFER_SIZE,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    const bindGroup = this.device.createBindGroup({
+      layout: this.bindGroupLayout,
+      entries: [
+        {
+          binding: 0,
+          resource: {
+            buffer: this.buffers.dimensions!,
+          },
         },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: gameOfLifeOutput,
+        {
+          binding: 1,
+          resource: {
+            buffer: this.gameOfLifeModule?.buffers.output!,
+          },
         },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: output,
+        {
+          binding: 2,
+          resource: {
+            buffer: output,
+          },
         },
+      ],
+    });
+
+    const pipeline = this.device.createComputePipeline({
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.bindGroupLayout],
+      }),
+      compute: {
+        module: this.shaderModules.imageData,
+        entryPoint: "main",
       },
-    ],
-  });
+    });
 
-  const gameOfLifePipeline = device.createComputePipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    compute: {
-      module: gameOfLifeModule,
-      entryPoint: "main",
-    },
-  });
+    this.imageDataModule = {
+      pipeline,
+      bindGroup,
+      bufferSize: BUFFER_SIZE,
+      buffers: {
+        output,
+        staging,
+      },
+    };
+  }
 
-  const imageDataPipeline = device.createComputePipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-    }),
-    compute: {
-      module: imageDataModule,
-      entryPoint: "main",
-    },
-  });
+  updateDimensions({ width, height }: Dimensions) {
+    this.gameDimensions = { width, height };
 
-  return async (state: Uint32Array): Promise<[Uint32Array, Uint8ClampedArray]> => {
-    device.queue.writeBuffer(input, 0, state);
+    const dimensions = this.device.createBuffer({
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true,
+    });
+    const mappedDimensions = new Uint32Array(dimensions.getMappedRange());
+    mappedDimensions.set([width, height]);
+    dimensions.unmap();
+    this.buffers.dimensions?.destroy();
+    this.buffers.dimensions = dimensions;
 
-    const commandEncoder = device.createCommandEncoder();
+    this.initGameOfLifeModule();
+    this.initImageDataModule();
+  }
+
+  async process(state: GridState): Promise<[GridState, Uint8ClampedArray]> {
+    this.device.queue.writeBuffer(this.gameOfLifeModule.buffers.input, 0, state);
+
+    const commandEncoder = this.device.createCommandEncoder();
     const passEncoder = commandEncoder.beginComputePass();
-    passEncoder.setPipeline(gameOfLifePipeline);
-    passEncoder.setBindGroup(0, bindGroup);
-    passEncoder.dispatchWorkgroups(Math.ceil(BUFFER_SIZE / 200));
-    passEncoder.setPipeline(imageDataPipeline);
-    passEncoder.setBindGroup(0, imageDataBindGroup);
-    passEncoder.dispatchWorkgroups(Math.ceil(BUFFER_SIZE / 200));
+    passEncoder.setPipeline(this.gameOfLifeModule.pipeline);
+    passEncoder.setBindGroup(0, this.gameOfLifeModule.bindGroup);
+    passEncoder.dispatchWorkgroups(Math.ceil(this.gameOfLifeModule.bufferSize / 200));
+    passEncoder.setPipeline(this.imageDataModule.pipeline);
+    passEncoder.setBindGroup(0, this.imageDataModule.bindGroup);
+    passEncoder.dispatchWorkgroups(Math.ceil(this.imageDataModule.bufferSize / 200));
     passEncoder.end();
     commandEncoder.copyBufferToBuffer(
-      gameOfLifeOutput,
+      this.gameOfLifeModule.buffers.output,
       0, // Source offset
-      gameOfLifeStagingBuffer,
+      this.gameOfLifeModule.buffers.staging,
       0, // Destination offset
-      BUFFER_SIZE
+      this.gameOfLifeModule.buffers.output.size
     );
     commandEncoder.copyBufferToBuffer(
-      output,
+      this.imageDataModule.buffers.output,
       0, // Source offset
-      stagingBuffer,
+      this.imageDataModule.buffers.staging,
       0, // Destination offset
-      BUFFER_SIZE
+      this.imageDataModule.buffers.output.size
     );
     const commands = commandEncoder.finish();
-    device.queue.submit([commands]);
+    this.device.queue.submit([commands]);
 
     await Promise.all([
-      gameOfLifeStagingBuffer.mapAsync(
+      this.gameOfLifeModule.buffers.staging.mapAsync(
         GPUMapMode.READ,
         0, // Offset
-        BUFFER_SIZE // Length
+        this.gameOfLifeModule.buffers.staging.size // Length
       ),
-      stagingBuffer.mapAsync(
+      this.imageDataModule.buffers.staging.mapAsync(
         GPUMapMode.READ,
         0, // Offset
-        BUFFER_SIZE // Length
+        this.imageDataModule.buffers.staging.size // Length
       ),
     ]);
-    let copyArrayBuffer = gameOfLifeStagingBuffer.getMappedRange(0, BUFFER_SIZE);
+    let copyArrayBuffer = this.gameOfLifeModule.buffers.staging.getMappedRange(
+      0,
+      this.gameOfLifeModule.buffers.staging.size
+    );
     const gameStateData = copyArrayBuffer.slice(0);
-    gameOfLifeStagingBuffer.unmap();
+    this.gameOfLifeModule.buffers.staging.unmap();
 
-    copyArrayBuffer = stagingBuffer.getMappedRange(0, BUFFER_SIZE);
+    copyArrayBuffer = this.imageDataModule.buffers.staging.getMappedRange(0, this.imageDataModule.buffers.staging.size);
     const imageData = copyArrayBuffer.slice(0);
-    stagingBuffer.unmap();
+    this.imageDataModule.buffers.staging.unmap();
     return [new Uint32Array(gameStateData), new Uint8ClampedArray(imageData)];
-  };
+  }
 }

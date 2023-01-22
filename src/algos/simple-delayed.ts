@@ -1,4 +1,4 @@
-import type { Frame, GridState } from "../types";
+import type { Frame } from "../types";
 import { wait } from "../util";
 import { Grid } from "../grid";
 
@@ -35,7 +35,7 @@ function getLiveNeighborCount(frame: Frame, index: number) {
   return count;
 }
 
-async function getNextState(frame: Frame): Promise<[GridState, Uint8ClampedArray]> {
+async function getNextState(frame: Frame): Promise<Uint8ClampedArray> {
   const newState = frame.gridState.slice();
   for (let i = 0; i < frame.gridState.length; i++) {
     const liveCount = getLiveNeighborCount(frame, i);
@@ -53,8 +53,8 @@ async function getNextState(frame: Frame): Promise<[GridState, Uint8ClampedArray
       }
     }
   }
-  await wait(1);
-  return [newState, Grid.getImageDataArrayFromState(newState)];
+  await wait(300);
+  return Grid.getImageDataArrayFromState(newState);
 }
 
 export default getNextState;

@@ -16,4 +16,8 @@ export class SlidingWindow {
   avg() {
     return this.buffer.reduce((total, d) => total + d, 0) / this.buffer.length;
   }
+
+  reset() {
+    this.buffer.length = 0;
+  }
 }
