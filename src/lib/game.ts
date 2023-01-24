@@ -1,11 +1,9 @@
 import { wait, randomize } from "./util";
 import { SlidingWindow } from "./metrics";
-import { Dimensions, Frame } from "./types";
-import type { GridState } from "./types";
+import type { Dimensions, GridState, Frame } from "./types";
 import { Grid } from "./grid";
 
 type FrameGenerator = (prevFrame: Frame) => Promise<[GridState, Uint8ClampedArray]>;
-type RenderFn = (imageData: Uint8ClampedArray) => void;
 
 export class Game {
   private _generateNewFrame: FrameGenerator;
@@ -28,7 +26,7 @@ export class Game {
     this.fpsMetrics = new SlidingWindow(100);
     this.grid = new Grid(dimensions);
     this.updateDimensions(dimensions);
-    this.render(Grid.getImageDataArrayFromState(this.state));
+    // this.render(Grid.getImageDataArrayFromState(this.state));
   }
 
   getCurrentFrame(): Frame {
@@ -39,6 +37,9 @@ export class Game {
   }
 
   updateDimensions(dimensions: Dimensions) {
+    if (this.running) {
+      this.cancelNextUpdate = true;
+    }
     this.dimensions = dimensions;
     this.state = new Uint32Array(this.dimensions.width * this.dimensions.height);
     this.grid.updateDimensions(dimensions);

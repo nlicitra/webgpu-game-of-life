@@ -1,7 +1,8 @@
 /// <reference types="@webgpu/types" />
 import gameOfLifeShader from "./shaders/game-of-life.wgsl?raw";
 import imageDataShader from "./shaders/image-data.wgsl?raw";
-import { Dimensions, GridState } from "./types";
+import type { Dimensions, GridState } from "./types";
+import { browser } from "$app/environment";
 
 interface GPUModule {
   buffers: Record<string, GPUBuffer>;
@@ -25,16 +26,17 @@ export class WebGPUGameOfLife {
     dimensions?: GPUBuffer;
   };
 
-  constructor(dimensions: Dimensions) {
+  constructor() {
     this.buffers = {
       dimensions: undefined,
     };
-    this.init().then(() => {
-      this.updateDimensions(dimensions);
-    });
   }
 
-  async init() {
+  isSupported() {
+    return browser && Boolean(navigator.gpu);
+  }
+
+  async init(dimensions: Dimensions) {
     if (!navigator.gpu) throw new Error("WebGPU not supported.");
 
     const adapter = await navigator.gpu.requestAdapter();
@@ -77,9 +79,11 @@ export class WebGPUGameOfLife {
         },
       ],
     });
+
+    this.updateDimensions(dimensions);
   }
 
-  initGameOfLifeModule() {
+  async initGameOfLifeModule() {
     if (this.gameOfLifeModule) {
       Object.values(this.gameOfLifeModule.buffers).forEach((b) => b.destroy());
     }

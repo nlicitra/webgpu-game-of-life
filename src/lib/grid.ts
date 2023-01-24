@@ -1,4 +1,4 @@
-import { Dimensions, GridState } from "./types";
+import type { Dimensions, GridState } from "./types";
 
 interface IGridOptions {
   width: number;
@@ -59,63 +59,6 @@ export class Grid {
 
   private getIndex(row: number, column: number) {
     return row * this.width + column;
-  }
-
-  private drawGrid() {
-    if (!this.ctx) throw new Error("Cannot draw without a context");
-    this.ctx.beginPath();
-    this.ctx.strokeStyle = Grid.GRID_COLOR;
-
-    // Vertical lines.
-    for (let i = 0; i <= this.width; i++) {
-      this.ctx.moveTo(i * (Grid.CELL_SIZE + 1) + 1, 0);
-      this.ctx.lineTo(i * (Grid.CELL_SIZE + 1) + 1, (Grid.CELL_SIZE + 1) * this.height + 1);
-    }
-
-    // Horizontal lines.
-    for (let j = 0; j <= this.height; j++) {
-      this.ctx.moveTo(0, j * (Grid.CELL_SIZE + 1) + 1);
-      this.ctx.lineTo((Grid.CELL_SIZE + 1) * this.width + 1, j * (Grid.CELL_SIZE + 1) + 1);
-    }
-
-    this.ctx.stroke();
-  }
-
-  private drawCells(state: GridState) {
-    if (!this.ctx) throw new Error("Cannot draw without a context");
-    this.ctx.beginPath();
-
-    // Alive cells.
-    this.ctx.fillStyle = Grid.ALIVE_COLOR;
-    for (let row = 0; row < this.height; row++) {
-      for (let col = 0; col < this.width; col++) {
-        const idx = this.getIndex(row, col);
-        if (state[idx] !== 1) {
-          continue;
-        }
-
-        this.ctx.fillRect(col * Grid.CELL_SIZE + 0, row * Grid.CELL_SIZE + 0, Grid.CELL_SIZE, Grid.CELL_SIZE);
-      }
-    }
-
-    // Dead cells.
-    this.ctx.fillStyle = Grid.DEAD_COLOR;
-    for (let row = 0; row < this.height; row++) {
-      for (let col = 0; col < this.width; col++) {
-        const idx = this.getIndex(row, col);
-        if (state[idx] !== 0) {
-          continue;
-        }
-
-        this.ctx.fillRect(col * Grid.CELL_SIZE, row * Grid.CELL_SIZE, Grid.CELL_SIZE, Grid.CELL_SIZE);
-      }
-    }
-
-    this.ctx.stroke();
-  }
-  render(state: GridState) {
-    // this.drawGrid();
-    this.drawCells(state);
   }
 
   renderImageData(imageData: Uint8ClampedArray) {
