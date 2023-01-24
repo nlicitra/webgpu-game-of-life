@@ -81,7 +81,9 @@
     const dimensions = { width: size, height: size };
     game.updateDimensions(dimensions);
     if (gpu.isSupported()) {
-      gpu.updateDimensions(dimensions);
+      gpu.onNextFrameGenerated(() => {
+        gpu.updateDimensions(dimensions);
+      });
     }
     game.fpsMetrics.reset();
     game.randomizeState();
@@ -117,7 +119,7 @@
       <input type="radio" id="js-compute-type" name="compute-type" value="js" checked on:change={onComputeTypeChange} />
       <label for="js-compute-type">JavaScript</label>
     </div>
-    <div>
+    <div title={gpu.isSupported() ? "" : "Your browser does not support WebGPU."}>
       <input
         disabled={!gpu.isSupported() || errorWithGPU}
         type="radio"

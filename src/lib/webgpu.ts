@@ -25,6 +25,7 @@ export class WebGPUGameOfLife {
   buffers: {
     dimensions?: GPUBuffer;
   };
+  private _onFrameGenerated?: () => void;
 
   constructor() {
     this.buffers = {
@@ -83,10 +84,19 @@ export class WebGPUGameOfLife {
     this.updateDimensions(dimensions);
   }
 
+  private destroyBuffers(buffers: GPUBuffer[]) {
+    buffers.forEach((b) => {
+      if (b.mapState === "pending") {
+        setTimeout(() => {
+          b.destroy();
+        }, 500);
+      } else {
+        b.destroy();
+      }
+    });
+  }
+
   async initGameOfLifeModule() {
-    if (this.gameOfLifeModule) {
-      Object.values(this.gameOfLifeModule.buffers).forEach((b) => b.destroy());
-    }
     const { width, height } = this.gameDimensions;
     const BUFFER_SIZE = width * height * 4;
     const input = this.device.createBuffer({
@@ -136,6 +146,7 @@ export class WebGPUGameOfLife {
       },
     });
 
+    const oldBuffers = Object.values(this.gameOfLifeModule?.buffers || {});
     this.gameOfLifeModule = {
       pipeline,
       bindGroup,
@@ -146,12 +157,12 @@ export class WebGPUGameOfLife {
         staging,
       },
     };
+    if (oldBuffers?.length) {
+      this.destroyBuffers(oldBuffers);
+    }
   }
 
   initImageDataModule() {
-    if (this.imageDataModule) {
-      Object.values(this.imageDataModule.buffers).forEach((b) => b.destroy());
-    }
     const { width, height } = this.gameDimensions;
     const BUFFER_SIZE = width * height * 4;
     const output = this.device.createBuffer({
@@ -197,6 +208,7 @@ export class WebGPUGameOfLife {
       },
     });
 
+    const oldBuffers = Object.values(this.imageDataModule?.buffers || {});
     this.imageDataModule = {
       pipeline,
       bindGroup,
@@ -206,6 +218,13 @@ export class WebGPUGameOfLife {
         staging,
       },
     };
+    if (oldBuffers?.length) {
+      this.destroyBuffers(oldBuffers);
+    }
+  }
+
+  onNextFrameGenerated(fn: () => void) {
+    this._onFrameGenerated = fn;
   }
 
   updateDimensions({ width, height }: Dimensions) {
@@ -219,7 +238,9 @@ export class WebGPUGameOfLife {
     const mappedDimensions = new Uint32Array(dimensions.getMappedRange());
     mappedDimensions.set([width, height]);
     dimensions.unmap();
-    this.buffers.dimensions?.destroy();
+    if (this.buffers.dimensions) {
+      this.destroyBuffers([this.buffers.dimensions]);
+    }
     this.buffers.dimensions = dimensions;
 
     this.initGameOfLifeModule();
@@ -277,6 +298,10 @@ export class WebGPUGameOfLife {
     copyArrayBuffer = this.imageDataModule.buffers.staging.getMappedRange(0, this.imageDataModule.buffers.staging.size);
     const imageData = copyArrayBuffer.slice(0);
     this.imageDataModule.buffers.staging.unmap();
+    if (this._onFrameGenerated) {
+      this._onFrameGenerated();
+      this._onFrameGenerated = undefined;
+    }
     return [new Uint32Array(gameStateData), new Uint8ClampedArray(imageData)];
   }
 }
