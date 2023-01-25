@@ -119,7 +119,7 @@
       <input type="radio" id="js-compute-type" name="compute-type" value="js" checked on:change={onComputeTypeChange} />
       <label for="js-compute-type">JavaScript</label>
     </div>
-    <div title={gpu.isSupported() ? "" : "Your browser does not support WebGPU."}>
+    <div title={gpu.isSupported() || errorWithGPU ? "" : "Your browser does not support WebGPU."}>
       <input
         disabled={!gpu.isSupported() || errorWithGPU}
         type="radio"
@@ -128,7 +128,10 @@
         value="gpu"
         on:change={onComputeTypeChange}
       />
-      <label for="gpu-compute-type">GPU</label>
+      <label for="gpu-compute-type" class:disabled={!gpu.isSupported() || errorWithGPU}>GPU</label>
+      {#if !gpu.isSupported() || errorWithGPU}
+        <span>(not supported)</span>
+      {/if}
     </div>
   </fieldset>
   <div id="chart">
@@ -165,5 +168,9 @@
   #fps {
     float: right;
     font-weight: 700;
+  }
+
+  .disabled {
+    text-decoration: line-through;
   }
 </style>
