@@ -11,7 +11,7 @@ var<storage, read> input: array<u32>;
 @group(0) @binding(2)
 var<storage, read_write> output: array<u32>;
 
-type color = vec4<u32>;
+alias color = vec4<u32>;
 
 @compute @workgroup_size(200)
 fn main(
